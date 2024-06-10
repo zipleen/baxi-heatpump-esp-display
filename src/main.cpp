@@ -170,24 +170,6 @@ void printBuffer(const std::deque<int>& buffer, unsigned int length) {
       serializeJson(jsonDoc, jsonStr);
       client.publish(mqttStateTopic, jsonStr.c_str());
 
-      client.publish("Baxi/debug_B1", hexValue.c_str());
-      String d = getHexV(buffer[inicio + 4]) + ' ' +
-        getHexV(buffer[inicio + 5]) + ' ' +
-        getHexV(buffer[inicio + 0]) + ' ' +
-        getHexV(buffer[inicio + 10]) + ' ' + // 64 heating, 00 not heating - almost sure que isto é
-        getHexV(buffer[inicio + 15]) + ' ' +
-        getHexV(buffer[inicio + 16]) + ' ' +
-        getHexV(buffer[inicio + 17]) + ' ' +
-        getHexV(buffer[inicio + 21]) + ' ' + // 51 - electric on,  11 non eletric, 00 off
-        getHexV(buffer[inicio + 22]) + ' ' +
-        getHexV(buffer[inicio + 23]) + ' ' +
-        getHexV(buffer[inicio + 24]) + ' ' +
-        getHexV(buffer[inicio + 26]) + ' ' +
-        getHexV(buffer[inicio + 28]) + ' ' +
-        getHexV(buffer[inicio + 29]) + ' ' +
-        getHexV(buffer[inicio + 31]) + ' ' 
-        ;
-      client.publish("Baxi/debug_B1_", d.c_str());
     } else {
       client.publish("Baxi/unknown", hexValue.c_str());
       return;
@@ -247,9 +229,9 @@ void readSerialPort() {
       // Process the buffer message
       printBuffer(buffer, buffer.size());
 
-      if (millis() - processTime < 1000) {
+      if (millis() - processTime < 1300) {
         // new message seem to take 1.436 seconds after the end of the previous message
-        delay(1000 - (millis() - processTime));
+        delay(1300 - (millis() - processTime));
       }
       sentOne = true;
 
