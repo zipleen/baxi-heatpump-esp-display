@@ -48,7 +48,7 @@ bool cansend = false;
 // Define the size of the binary array in bytes
 const int binarySizeBytes = 1;  // 8 bits
 
-bool debug = false;
+bool debug = true;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -203,11 +203,13 @@ void readSerialPort() {
   unsigned long functime = micros();
   //debugln("TGH: " + String(micros() - timetogetto));
 
-  digitalWrite(LED, LOW);
+  
   while (Serial.available() > 0) {
     // baud rate 600 means we only have the next "bit" after 1.667ms. this means we need to wait 1.667ms until we loop again
     int data = Serial.read();
     previousMicrosBaudRate = micros();
+
+    
 
     if (data == 0xFE && startByteCount == 0) {
       startByteCount++;
@@ -234,12 +236,13 @@ void readSerialPort() {
 
     if (startBytesFound && endBytesFound) {
       unsigned long processTime = millis();
+      digitalWrite(LED, LOW);
       // Process the buffer message
       printBuffer(buffer, buffer.size());
 
-      if (millis() - processTime < 1300) {
+      if (millis() - processTime < 1000) {
         // new message seem to take 1.436 seconds after the end of the previous message
-        delay(1300 - (millis() - processTime));
+        delay(1000 - (millis() - processTime));
       }
       sentOne = true;
 
@@ -391,8 +394,12 @@ void setup() {
 
   startupTime = millis(); // Record the startup time in milliseconds
 
-  Serial.begin(600);
-
+  // seems that I screwed up the board somehow, and the updates for FE B1 are now screwed.
+  // but we do have access to the second line that contains inverted bytes.
+  // invert signal is the last true
+  bool invertTxBytes = true; 
+  Serial.begin(600, SERIAL_8N1, SERIAL_FULL, 1, invertTxBytes);
+  
   pinMode(LED, OUTPUT);
   //pinMode(dataPin, INPUT);
   
