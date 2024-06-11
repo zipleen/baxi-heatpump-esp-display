@@ -1,6 +1,11 @@
 #include <Arduino.h>
 #include <deque>
+#ifdef ESP8266
 #include <ESP8266WiFi.h>
+#else
+#include <WiFi.h>
+#include <esp_task_wdt.h>  
+#endif
 #include <ArduinoOTA.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -26,8 +31,11 @@ const char* teleTopic = "Heatpump/tele"; //Topic for the telemetry
 
 const char* resetCause;
 
+#ifdef ESP8266
 #define LED D0
-const int dataPin = D6;
+#else
+#define LED 33
+#endif
 
 const int boundaryLen = 8;
 const int bufferSize = 128;
@@ -306,6 +314,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 void setup() {
+  #ifdef ESP8266
   // Enable the Watchdog Timer
   ESP.wdtEnable(WDT_TIMEOUT_S * 1000000); // Convert seconds to microseconds
 
@@ -338,13 +347,54 @@ void setup() {
       resetCause = "Unknown reset cause";
       break;
   }
+  #else
+    esp_task_wdt_init(WDT_TIMEOUT_S, true);             // enable panic so ESP32 restarts
+    esp_task_wdt_add(NULL);     
+    int BootReason = esp_reset_reason();
+    String resetCause;
+    switch (BootReason) {
+      case ESP_RST_POWERON:
+        resetCause = "Power-on reset";
+        break;
+      case ESP_RST_INT_WDT:
+        resetCause = "Watchdog reset";
+        break;
+      case ESP_RST_TASK_WDT:
+        resetCause = "Exception reset";
+        break;
+      case ESP_RST_WDT:
+        resetCause = "Software Watchdog reset";
+        break;
+      case ESP_RST_SW:
+        resetCause = "Software restart";
+        break;
+      case ESP_RST_DEEPSLEEP:
+        resetCause = "Deep sleep wake-up";
+        break;
+      case ESP_RST_EXT:
+        resetCause = "External reset";
+        break;
+      case ESP_RST_PANIC:
+        resetCause = "Software reset due to exception/panic";
+        break;
+      case ESP_RST_BROWNOUT:
+        resetCause = "Brownout reset";
+        break;
+      case ESP_RST_SDIO:
+        resetCause = "Reset over SDIO";
+        break;
+      default:
+        resetCause = "Unknown reset cause";
+        break;
+    }
+  #endif
 
   startupTime = millis(); // Record the startup time in milliseconds
 
   Serial.begin(600);
 
   pinMode(LED, OUTPUT);
-  pinMode(dataPin, INPUT);
+  //pinMode(dataPin, INPUT);
   
   delay(2000);
 
@@ -388,6 +438,7 @@ void setup() {
     otaInProgress = true;
     debugln("OTA update started...");
   });
+  
   ArduinoOTA.onEnd([]() {
     otaInProgress = false;
     debugln("\nOTA update finished!");
@@ -403,6 +454,7 @@ void setup() {
 
   // Start OTA
   ArduinoOTA.begin();
+
 }
 
 
@@ -435,8 +487,12 @@ void loop() {
   readSerialPort();
 
   if (currentMillis - previousMillis >= interval) {
+    #ifdef ESP8266
     // Perform your action here at the specified interval
     ESP.wdtFeed();
+    #else
+    esp_task_wdt_reset();
+    #endif
     previousMillis = currentMillis;
   }
 
