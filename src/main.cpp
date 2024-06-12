@@ -59,6 +59,7 @@ unsigned long previousMillistele = 0;
 const unsigned long interval = 1000;
 const unsigned long intervaltele = 10000;
 unsigned long lastActivationTime = 0;
+unsigned long lastReceivedMessageTime = 0;
 
 // client.publish(mqttStateTopic, "D", true);
 
@@ -113,8 +114,8 @@ String getHexV(int value) {
 String convertBytesToHexString(const std::deque<int>& buffer, unsigned int length) {
   String hexValue = "";
   if (buffer.size() >= length) {
-    unsigned int inicio = buffer.size() - length;
-    for (unsigned int i = inicio; i < buffer.size(); i++) {
+    unsigned int startPadding = buffer.size() - length;
+    for (unsigned int i = startPadding; i < buffer.size(); i++) {
       char hex[3];
       snprintf(hex, sizeof(hex), "%02X", buffer[i]);
       hexValue += hex;
@@ -125,8 +126,8 @@ String convertBytesToHexString(const std::deque<int>& buffer, unsigned int lengt
 
 void printBuffer(const std::deque<int>& buffer, unsigned int length) {
   if (buffer.size() >= length) {
-    unsigned int inicio = buffer.size() - length;
-    /*for (unsigned int i = inicio; i < buffer.size(); i++) {
+    unsigned int startPadding = buffer.size() - length;
+    /*for (unsigned int i = startPadding; i < buffer.size(); i++) {
       debugprint(buffer[i]);
     }
     debugln();*/
@@ -137,27 +138,27 @@ void printBuffer(const std::deque<int>& buffer, unsigned int length) {
       client.publish(debugTopic, hexValue.c_str());
     }
 
-    if (buffer[inicio + 2] == 0xB4) {
-      client.publish("Baxi/debug_B4", hexValue.c_str());
+    if (buffer[startPadding + 2] == 0xB4) {
+      //client.publish("Baxi/debug_B4", hexValue.c_str());
 
-    } else if (buffer[inicio + 2] == 0x02) {
+    } else if (buffer[startPadding + 2] == 0x02) {
       // looks to be the "settings" we have set? 
       // byte 6 seems to be the temperature exactly in integer
-      client.publish("Heatpump/requested_temp", String(buffer[inicio + 6]).c_str());
+      client.publish("Heatpump/requested_temp", String(buffer[startPadding + 6]).c_str());
 
-      client.publish("Baxi/debug_02", hexValue.c_str());
+      //client.publish("Baxi/debug_02", hexValue.c_str());
 
-    } else if (buffer[inicio + 2] == 0xB1) {
+    } else if (buffer[startPadding + 2] == 0xB1) {
       // 64 heating, 00 not heating - almost sure que isto é
-      String is_pump_heating = buffer[inicio + 10] == 0x64 ? "1" : (buffer[inicio + 10] == 0x00 ? "0" : "unknown");
+      String is_pump_heating = buffer[startPadding + 10] == 0x64 ? "1" : (buffer[startPadding + 10] == 0x00 ? "0" : "unknown");
       client.publish("Heatpump/is_pump_heating", is_pump_heating.c_str());
       // 51 - electric + pump,  11 pump, 00 off, 40 only eletric
-      String heating_type = buffer[inicio + 21] == 0x51 ? "eletric+pump" : (buffer[inicio + 21] == 0x11 ? "pump" : (buffer[inicio + 21] == 0x0 ? "off" : (buffer[inicio + 21] == 0x40 ? "eletric" : "unknown")));
-      int heating_type_int = buffer[inicio + 21] == 0x51 ? 3 : (buffer[inicio + 21] == 0x11 ? 1 : (buffer[inicio + 21] == 0x0 ? 0 : (buffer[inicio + 21] == 0x40 ? 2 : 99)));
+      String heating_type = buffer[startPadding + 21] == 0x51 ? "eletric+pump" : (buffer[startPadding + 21] == 0x11 ? "pump" : (buffer[startPadding + 21] == 0x0 ? "off" : (buffer[startPadding + 21] == 0x40 ? "eletric" : "unknown")));
+      int heating_type_int = buffer[startPadding + 21] == 0x51 ? 3 : (buffer[startPadding + 21] == 0x11 ? 1 : (buffer[startPadding + 21] == 0x0 ? 0 : (buffer[startPadding + 21] == 0x40 ? 2 : 99)));
       client.publish("Heatpump/heating_type", heating_type.c_str());
 
-      float temp = (buffer[inicio + 16] - 30) / 2.0;
-      float temp2 = (buffer[inicio + 23] - 30) / 2.0;
+      float temp = (buffer[startPadding + 16] - 30) / 2.0;
+      float temp2 = (buffer[startPadding + 23] - 30) / 2.0;
       float untruncated_temp = (temp + temp2) / 2.0;
       int display_temp = static_cast<int>((static_cast<int>(temp) + static_cast<int>(temp2)) / 2.0);
       client.publish("Heatpump/untruncated_temp", (String(untruncated_temp)).c_str());
@@ -258,6 +259,7 @@ void readSerialPort() {
       //debugln("TT: " + String(micros() - functime) + "us");
 
       timetogetto = micros();
+      lastReceivedMessageTime = millis();
       return ;
     }
 
@@ -308,7 +310,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
       debugln("Debug off!");
       debug = false;
     } else if (receivedPayload == "restart") {
-      client.publish(logTopic, "A reiniciar...");
+      client.publish(logTopic, "Rebooting...");
       debugln("Restart..");
       delay(1000);
       ESP.restart();
@@ -433,6 +435,7 @@ void setup() {
     }
   }
 
+  lastReceivedMessageTime = millis();
   client.publish(logTopic, "Started");
   // Publish reset cause to logTopic
   const char* resetCauseChar = resetCause.c_str();
@@ -501,6 +504,13 @@ void loop() {
     esp_task_wdt_reset();
     #endif
     previousMillis = currentMillis;
+  }
+
+  if (millis() - lastReceivedMessageTime >= (1000 * 60 * 5)) {
+    // 5 minutes without receiving a message
+    client.publish(logTopic, "Reboot because no message");
+    delay(1000);
+    ESP.restart();
   }
 
   if (millis() - previousMillistele >= intervaltele) {
