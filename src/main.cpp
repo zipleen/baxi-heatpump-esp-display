@@ -240,9 +240,9 @@ void readSerialPort() {
       // Process the buffer message
       printBuffer(buffer, buffer.size());
 
-      if (millis() - processTime < 1000) {
+      if (millis() - processTime < 1300) {
         // new message seem to take 1.436 seconds after the end of the previous message
-        delay(1000 - (millis() - processTime));
+        delay(1300 - (millis() - processTime));
       }
       sentOne = true;
 
